@@ -1,0 +1,10 @@
+model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
+adapter_path: null
+data_file: data/processed/gsm8k_test.jsonl
+output_jsonl: outputs/baseline/predictions.jsonl
+metrics_file: results/baseline_metrics.json
+batch_size: 8
+max_new_tokens: 512
+temperature: 0.0
+top_p: 1.0
+use_chat_template: true

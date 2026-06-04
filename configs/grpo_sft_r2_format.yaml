@@ -1,0 +1,33 @@
+# E4-R2: SFT merged model -> GRPO, correctness + format reward
+model_name_or_path: outputs/sft_qwen_1.5b_merged
+train_file: data/processed/grpo_train.jsonl
+output_dir: outputs/grpo_sft_r2_format
+reward_type: r2_correct_format
+
+max_prompt_length: 256
+max_completion_length: 512
+num_generations: 4
+max_steps: 200
+learning_rate: 5.0e-6
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 4
+logging_steps: 5
+save_steps: 50
+save_total_limit: 2
+bf16: true
+gradient_checkpointing: true
+report_to: tensorboard
+seed: 42
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj

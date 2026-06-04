@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.cache/
+wandb/
+runs/
+outputs/*
+!outputs/.gitkeep
+results/*
+!results/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/raw/*
+!data/raw/.gitkeep
+.DS_Store
