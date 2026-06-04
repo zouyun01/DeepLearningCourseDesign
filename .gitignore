@@ -39,13 +39,11 @@ data/processed/*
 data/debug/*
 !data/debug/.gitkeep
 
-# Model checkpoints, adapters, generated predictions
-outputs/*
-!outputs/.gitkeep
-
-# Metrics, figures, error cases, experiment summaries
-results/*
-!results/.gitkeep
+# Experiment outputs and results are intentionally tracked when they are small
+# records such as predictions.jsonl, metrics JSON/CSV, figures, config JSON and
+# trainer_state.json. Large model/checkpoint binaries are ignored below.
+!outputs/
+!results/
 
 # Training / experiment trackers
 wandb/

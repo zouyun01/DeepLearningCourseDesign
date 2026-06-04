@@ -3,7 +3,14 @@ train_file: data/processed/sft_train.jsonl
 eval_file: data/processed/sft_val.jsonl
 output_dir: outputs/sft_qwen_1.5b
 
-max_seq_length: 1024
+# Use only the concise post-</think> solution as the CoT target. This keeps
+# the trailing "Final Answer:" inside max_seq_length and avoids teaching the
+# rambling R1 <think> style that triggered eval truncation.
+strip_think: true
+# Raised from 1024: ~38% of the old full-trace samples exceeded 1024 tokens,
+# truncating the "Final Answer:" target. strip_think makes most samples much
+# shorter, but 2048 leaves safe headroom.
+max_seq_length: 2048
 num_train_epochs: 2
 learning_rate: 2.0e-4
 per_device_train_batch_size: 2

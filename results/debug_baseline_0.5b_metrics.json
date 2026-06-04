@@ -1,0 +1,15 @@
+{
+  "num_examples": 50,
+  "accuracy_strict": 0.16,
+  "accuracy_lenient": 0.28,
+  "format_success_rate": 0.34,
+  "answer_extraction_rate_strict": 0.34,
+  "answer_extraction_rate_lenient": 1.0,
+  "avg_response_length_words": 147.78,
+  "median_response_length_words": 148.5,
+  "overthinking_rate": 0.0,
+  "length_accuracy_correlation": -0.5387160723038334,
+  "model_name_or_path": "/root/autodl-tmp/models/Qwen2.5-0.5B-Instruct",
+  "adapter_path": null,
+  "data_file": "data/debug/gsm8k_test.jsonl"
+}

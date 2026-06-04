@@ -1,0 +1,15 @@
+{
+  "num_examples": 1319,
+  "accuracy_strict": 0.42380591357088704,
+  "accuracy_lenient": 0.48673237300985595,
+  "format_success_rate": 0.5322213798332069,
+  "answer_extraction_rate_strict": 0.5625473843821076,
+  "answer_extraction_rate_lenient": 1.0,
+  "avg_response_length_words": 139.82259287338894,
+  "median_response_length_words": 142.0,
+  "overthinking_rate": 0.0,
+  "length_accuracy_correlation": -0.447482576130147,
+  "model_name_or_path": "/root/autodl-tmp/models/Qwen2.5-1.5B-Instruct",
+  "adapter_path": null,
+  "data_file": "data/processed/gsm8k_test.jsonl"
+}
