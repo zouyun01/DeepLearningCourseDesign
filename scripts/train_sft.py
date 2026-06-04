@@ -36,6 +36,31 @@ def render_text(tokenizer, strip_think: bool):
     return _fn
 
 
+class NumericOnlyCollator:
+    """Drop raw text fields before delegating to TRL's completion-only collator.
+
+    Some TRL versions keep the source `text` column after SFT tokenization. The
+    base HF padding collator then tries to convert that string field to a tensor
+    and fails with "too many dimensions 'str'". Keeping only numeric/list fields
+    makes the batch shape exactly what the completion-only collator expects.
+    """
+
+    def __init__(self, collator):
+        self.collator = collator
+
+    def __call__(self, features):
+        cleaned = []
+        for feature in features:
+            cleaned.append(
+                {
+                    k: v
+                    for k, v in feature.items()
+                    if isinstance(v, (int, float, list, tuple))
+                }
+            )
+        return self.collator(cleaned)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
@@ -75,9 +100,9 @@ def main() -> None:
     # header so the model is trained only on reasoning + "Final Answer:".
     from trl import DataCollatorForCompletionOnlyLM
 
-    collator = DataCollatorForCompletionOnlyLM(
+    collator = NumericOnlyCollator(DataCollatorForCompletionOnlyLM(
         response_template=RESPONSE_TEMPLATE, tokenizer=tokenizer
-    )
+    ))
 
     lora_cfg = cfg.get("lora", {})
     peft_config = LoraConfig(
