@@ -1,7 +1,7 @@
 # E2 (CoT-SFT) 崩溃诊断与修复 — 工作交接文档
 
 > 日期：2026-06-05　·　范围：E2（CoT-SFT, Qwen2.5-1.5B + LoRA）训练崩溃的根因定位与代码修复
-> 状态：✅ 代码已修复并通过离线验证；⏳ 待在服务器（A800）重跑 E2 训练 + 评测
+> 状态：✅ 代码已修复、离线验证通过、**服务器重训+评测已完成，结果达标（见第 8 节）**
 
 ---
 
@@ -126,3 +126,90 @@ python scripts/merge_lora.py \
 
 - E4（CoT-SFT → GRPO，主实验组）依赖一个**好的 SFT 初始化**。修复前的崩溃 adapter 会让整条主线不可信，**必须先用修复后的 E2 重训并合并**，再做 E4/E5。
 - 建议（可选）：在重训 E4 前，仿照 `src/test_extraction.py` 加一个轻量单测，断言「训练渲染文本以评测 prompt 前缀开头 + 含 `Final Answer:` + 不超长」，防止格式再次漂移。
+
+---
+
+## 8. 修复后实测结果（2026-06-05 02:28 服务器重训 + 评测，GSM8K test 1319 条）
+
+崩溃版 adapter 已重命名保留为 `outputs/sft_qwen_1.5b_bad_old`（及其评测 `..._eval_bad_old`）作为对照；新结果在 `results/sft_metrics.json`，预测在 `outputs/sft/predictions.jsonl`。
+
+| 指标 | 旧（崩溃） | **新（修复后）** | Base 基线 | 判定 |
+|---|---|---|---|---|
+| `accuracy_strict` | 3.6% | **63.1%** | 42.4% | ✅ 超 Base +20.7pt |
+| `accuracy_lenient` | 13.3% | **63.2%** | 48.7% | ✅ |
+| `format_success_rate` | 4.3% | **99.2%** | 53.2% | ✅ |
+| `answer_extraction_rate_strict` | 8.5% | **99.1%** | 56.3% | ✅ |
+| `avg_response_length_words` | 170.1 | **107.9** | 139.8 | ✅ 比 Base 更短 |
+| `overthinking_rate` | 0 | 0.7% | 0 | 正常 |
+
+**结论：三项判据全部达成。** 另一个健康信号：strict 与 lenient 准确率几乎相等（63.07% vs 63.15%），说明答案格式已稳定，不再依赖 lenient 兜底。
+
+### 8.1 工程上必需的额外补丁：`NumericOnlyCollator`（已合入 `train_sft.py`）
+- 现象：部分 TRL 版本在 SFT 分词后仍保留源 `text` 字符串列，HF 基础 padding collator 会试图把字符串转 tensor，报 `too many dimensions 'str'`。
+- 处理：用 `NumericOnlyCollator` 包一层，在交给 `DataCollatorForCompletionOnlyLM` 前剔除非数值/列表字段。重训前若换 TRL 版本，保留此包装即可。
+
+### 8.2 已知的良性现象：输出仍含 `\boxed{}`
+- 实测 1304/1319 条 `completion` 仍带 `\boxed{X}`，因为 `strip_think` 保留的 `</think>` 后简洁解本身就含 `\(\boxed{X}\)`，模型学了下来。
+- **对指标无影响**：评测抽取的是最后一行 `Final Answer:`，抽取率 99.1%。
+- 如需更干净输出（可选）：在 `clean_reasoning()` 里用正则去掉 `\boxed{...}` 包裹即可，不影响其余逻辑。
+
+---
+
+## 9. GRPO（E3/E4/E5）跑前对齐审查与预防性修复（2026-06-05）
+
+在开跑 GRPO 前，对「rollout 采样 prompt / 奖励抽取 / 评测」三者做了一次对齐审查，目的是把 E2 同类隐患在浪费算力之前堵掉。
+
+### 9.1 已对齐、无需改动
+- **抽取逻辑单一来源**：`src/reward.py` 与 `src/metrics.py` 都调用 `answer_extraction.completion_stats`/`extract_answer_value`，奖励判对与评测判对用同一套规则，不存在「奖励算对、评测算错」的偏差。
+- **completion 格式兼容**：`reward.completion_to_text` 同时处理字符串与 chat 消息列表，对不同 TRL 返回格式健壮。
+- **合并模型带模板**：`merge_lora.py` 从 base 保存 tokenizer，合并目录含 chat template，E4/E5 的 GRPO 能正常套模板。
+
+### 9.2 🔴 致命隐患（E2 同款）：GRPO rollout prompt 不套 chat template
+- 根因：`prepare_data.py` 把 `prompt` 写成 `build_math_prompt()` 的**纯字符串**；TRL GRPOTrainer 只有当 prompt 是**消息列表**时才 `apply_chat_template(add_generation_prompt=True)`，纯字符串会被直接裸喂给 policy。
+- 后果：E4/E5 的 policy 是 ChatML 训练出来的 SFT 合并模型，却收到裸文本 → 采样退化；且评测走 ChatML，等于在「非评测分布」上做 RL，E3/E4 极可能白跑。
+- **修复（`scripts/train_grpo.py`，无需重跑 prepare_data）**：加载数据后就地把 `prompt` 列重建为 `build_chat_messages(question)`（复用评测同款函数）。这样 GRPOTrainer 会套与评测**逐字节一致**的模板。启动时打印首条 rollout prompt 便于核对。
+- **离线验证**：用真实 Qwen 模板渲染，`GRPO rollout prompt == EVAL prompt` 为 `True`，且均以 `<|im_start|>assistant` 收尾。
+
+### 9.3 🟡 次要风险：prompt 截断
+- `max_prompt_length: 256` 叠加 ChatML 模板 + system prompt 后，个别长 GSM8K 题可能被截断（且截的是开头的 system/题干）。
+- **修复**：四个 GRPO 配置 `max_prompt_length: 256 → 512`。
+
+### 9.4 GRPO 重跑命令
+```bash
+# E3：纯 base + GRPO（correctness-only）
+python scripts/train_grpo.py --config configs/grpo_base_r1.yaml
+# E4-R1 / E4-R2 / E5-R3（需先有 outputs/sft_qwen_1.5b_merged）
+python scripts/train_grpo.py --config configs/grpo_sft_r1_correct.yaml
+python scripts/train_grpo.py --config configs/grpo_sft_r2_format.yaml
+python scripts/train_grpo.py --config configs/grpo_sft_r3_length.yaml
+```
+评测各组时：`--model_name_or_path` 指向 base（E3）或 `outputs/sft_qwen_1.5b_merged`（E4/E5），`--adapter_path` 指向对应 GRPO 输出目录（见 README 第 7/8 节）。
+
+> 自检建议：每次 GRPO 启动看一眼日志里打印的「Example GRPO rollout prompt」，确认是 `system/user` + 末尾 `<|im_start|>assistant`，没有再退化成裸 `Question:`。
+
+---
+
+## 10. 一键运行脚本 `scripts/run_all.sh`（2026-06-05）
+
+把 E1–E5 全流程串成一个可断点续跑的脚本。
+
+### 10.1 用法
+```bash
+bash scripts/run_all.sh                                   # 跑全部阶段
+STAGES="merge e3 e4r1 e4r2 e5r3 report" bash scripts/run_all.sh  # 只跑 GRPO + 汇总
+MODEL_PATH=/path/to/Qwen2.5-1.5B-Instruct bash scripts/run_all.sh # 覆盖基座模型路径
+FORCE=1 bash scripts/run_all.sh                           # 无视"已完成"标记强制重跑
+```
+
+### 10.2 阶段与产物
+顺序：`data → test → e1 → e2 → merge → e3 → e4r1 → e4r2 → e5r3 → report`
+- 每个阶段日志写到 `logs/<stage>.log`（同时打印到控制台）。
+- **断点续跑**：每阶段有"完成标记"（对应 metrics/模型文件），已完成则自动跳过，除非 `FORCE=1`。
+- **模型路由**：E2 SFT 与 E3 GRPO 用 `--model_name_or_path "$MODEL_PATH"` 覆盖为基座；E4/E5 不覆盖，用配置里的 `outputs/sft_qwen_1.5b_merged`。为此给 `train_sft.py` / `train_grpo.py` 各加了可选 `--model_name_or_path` 覆盖参数。
+- `report` 只聚合**实际存在**的预测文件，因此即便只跑了部分组也能出 CSV/图。
+- 结尾打印各组 `strict / format / len` 一览。
+
+### 10.3 关键环境变量
+`MODEL_PATH`（基座模型，默认 `/root/autodl-tmp/models/Qwen2.5-1.5B-Instruct`）、`STAGES`、`FORCE`、`BATCH_SIZE`（默认 8）、`MAX_NEW_TOKENS`（默认 512）、`DATA_DIR`（默认 `data/processed`）。
+
+> 实现注记：脚本用 `set -euo pipefail`；已修两个 `set -e` 陷阱——`eval_model` 里 E1 无 adapter 的分支、以及 `report` 聚合时对缺失文件的判断，均改成显式 `if` 以保证返回 0，避免误退出。已用「假 python」干跑校验过命令路由与引号无误。

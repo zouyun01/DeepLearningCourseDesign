@@ -64,11 +64,13 @@ class NumericOnlyCollator:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
+    parser.add_argument("--model_name_or_path", default=None,
+                        help="Override the base model in the config (e.g. a local path).")
     args = parser.parse_args()
     cfg = load_yaml(args.config)
     set_seed(int(cfg.get("seed", 42)))
 
-    model_name = cfg["model_name_or_path"]
+    model_name = args.model_name_or_path or cfg["model_name_or_path"]
     output_dir = cfg["output_dir"]
     print(f"Loading model: {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)

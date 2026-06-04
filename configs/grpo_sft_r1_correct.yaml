@@ -4,7 +4,7 @@ train_file: data/processed/grpo_train.jsonl
 output_dir: outputs/grpo_sft_r1_correct
 reward_type: r1_correct
 
-max_prompt_length: 256
+max_prompt_length: 512  # raised from 256: ChatML template + system prompt can push long GSM8K questions past 256, truncating the prompt head
 max_completion_length: 512
 num_generations: 4
 max_steps: 200

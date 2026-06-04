@@ -13,17 +13,21 @@ import torch
 import sys
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 from io_utils import load_yaml, set_seed
+from prompts import build_chat_messages
 from reward import build_composite_reward
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
+    parser.add_argument("--model_name_or_path", default=None,
+                        help="Override the policy base model in the config (e.g. a local path). "
+                             "Do NOT use for E4/E5 where the config already points at the SFT-merged model.")
     args = parser.parse_args()
     cfg = load_yaml(args.config)
     set_seed(int(cfg.get("seed", 42)))
 
-    model_name = cfg["model_name_or_path"]
+    model_name = args.model_name_or_path or cfg["model_name_or_path"]
     print(f"Loading GRPO policy base: {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     tokenizer.padding_side = "left"
@@ -41,11 +45,23 @@ def main() -> None:
         model.config.use_cache = False
 
     ds = Dataset.from_json(cfg["train_file"])
+    # The prepare script stores `prompt` as a plain string, which TRL would feed
+    # to the policy WITHOUT a chat template -- a train/eval mismatch (the policy
+    # is ChatML-trained and evaluate.py uses apply_chat_template). Rebuild the
+    # prompt as conversational chat messages so GRPOTrainer applies the exact
+    # same template (system + user + assistant header) used at evaluation.
+    if "question" in ds.column_names:
+        ds = ds.map(lambda r: {"prompt": build_chat_messages(r["question"])})
+    else:
+        print("WARNING: no `question` column; keeping existing prompt as-is "
+              "(rollout prompt may NOT match the evaluation chat template).")
     # GRPOTrainer expects a prompt column. The prepare script already creates it.
     required_cols = {"prompt", "answer"}
     missing = required_cols - set(ds.column_names)
     if missing:
         raise ValueError(f"GRPO train file missing columns: {missing}. Run scripts/prepare_data.py first.")
+    print("Example GRPO rollout prompt (chat messages):")
+    print(ds[0]["prompt"])
 
     reward_cfg = cfg.get("reward", {}) or {}
     reward_func = build_composite_reward(
