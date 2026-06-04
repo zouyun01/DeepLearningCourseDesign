@@ -1,14 +1,79 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .cache/
-wandb/
-runs/
-outputs/*
-!outputs/.gitkeep
-results/*
-!results/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local environment and secrets
+.env
+.env.*
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Temporary / backup files
+*.bak
+*.tmp
+*.temp
+*.log
+
+# Dataset artifacts
 data/raw/*
 !data/raw/.gitkeep
-.DS_Store
+data/processed/*
+!data/processed/.gitkeep
+data/debug/*
+!data/debug/.gitkeep
+
+# Model checkpoints, adapters, generated predictions
+outputs/*
+!outputs/.gitkeep
+
+# Metrics, figures, error cases, experiment summaries
+results/*
+!results/.gitkeep
+
+# Training / experiment trackers
+wandb/
+runs/
+lightning_logs/
+tensorboard/
+events.out.tfevents.*
+
+# Hugging Face / local model cache
+hf_cache/
+.hf_cache/
+transformers_cache/
+datasets_cache/
+
+# Large model and array files, wherever they appear
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.npy
+*.npz
+*.arrow
+
+# Generated archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z

@@ -16,12 +16,15 @@ from fractions import Fraction
 from typing import Any
 
 FINAL_MARKERS = [
-    r"final\s*answer\s*[:：]",
-    r"answer\s*[:：]",
+    r"final\s*answer\s*(?:is|=|:|：)\s*",
+    r"answer\s*(?:is|=|:|：)\s*",
     r"答案\s*[:：是为]",
     r"最终答案\s*[:：是为]",
-    r"####\s*",
 ]
+
+# A bare trailing equals sign is common in math completions, but it is noisy in
+# intermediate calculations. Only use it when it appears near the end.
+TRAILING_EQUALS_MARKER = re.compile(r"=\s*(?=[-+$￥€£]?\d[\d,./\s%％]*(?:[.!?。．])?\s*$)")
 
 # Supports: -1, 1,234, 3.14, -2/3, 1,000.5
 NUMBER_PATTERN = re.compile(
@@ -68,6 +71,11 @@ def _first_number_after_marker(text: str) -> str | None:
             num = NUMBER_PATTERN.search(tail)
             if num:
                 candidates.append((m.start(), num.group(0)))
+    for m in TRAILING_EQUALS_MARKER.finditer(text):
+        tail = text[m.end() : m.end() + 120]
+        num = NUMBER_PATTERN.search(tail)
+        if num:
+            candidates.append((m.start(), num.group(0)))
     if not candidates:
         return None
     # Use the last explicit marker; models sometimes mention an earlier tentative answer.
