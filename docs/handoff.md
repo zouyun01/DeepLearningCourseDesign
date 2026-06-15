@@ -213,3 +213,35 @@ FORCE=1 bash scripts/run_all.sh                           # 无视"已完成"标
 `MODEL_PATH`（基座模型，默认 `/root/autodl-tmp/models/Qwen2.5-1.5B-Instruct`）、`STAGES`、`FORCE`、`BATCH_SIZE`（默认 8）、`MAX_NEW_TOKENS`（默认 512）、`DATA_DIR`（默认 `data/processed`）。
 
 > 实现注记：脚本用 `set -euo pipefail`；已修两个 `set -e` 陷阱——`eval_model` 里 E1 无 adapter 的分支、以及 `report` 聚合时对缺失文件的判断，均改成显式 `if` 以保证返回 0，避免误退出。已用「假 python」干跑校验过命令路由与引号无误。
+
+---
+
+## 11. 报告用分析产物与脚本（2026-06-05）
+
+为把报告写得比参考更充实，新增 3 个分析脚本，已全部用真实数据本地验证出图。`run_all.sh` 的 `report` 阶段已自动调用 `plot_analysis.py` 与 `classify_errors.py`（`error_limit` 提到 100000 以导出全部错误）。`plot_training_curves.py` 需先把服务器的 `outputs/grpo_*/runs/` sync 到本地再单独跑。
+
+### 11.1 三个脚本
+| 脚本 | 产物 | 依赖 |
+|---|---|---|
+| `scripts/plot_analysis.py` | `accuracy_vs_length` / `length_distribution` / `accuracy_by_length` / `accuracy_grouped` / `radar` 共 5 图 + `results/length_stats.csv` | 仅 predictions（无需 GPU/日志） |
+| `scripts/classify_errors.py` | `results/error_cases_classified.csv`（加 `auto_error_type` 列）+ `results/error_type_distribution.csv` + `error_type_distribution.png` | 仅 error_cases.csv |
+| `scripts/plot_training_curves.py` | `train_reward` / `train_loss` / `train_kl` / `train_completion_length` 共 4 图 | **需 sync `outputs/grpo_*/runs/`** + `pip install tensorboard` |
+
+> 本地运行用 conda `dl` 环境：`E:\anaconda3\envs\dl\python.exe`（已在该环境装好 tensorboard）。
+
+### 11.2 图表清单（共 16 图 + 4 表，远超参考报告）
+- **图（16）**：6 张基础柱状图（plot_results）+ 5 张深度分析图（plot_analysis）+ 1 张错误构成图 + 4 张训练曲线。
+- **表（4）**：`metrics_summary.csv`（主结果）、`length_stats.csv`（长度统计）、`error_type_distribution.csv`（错误类型分布）、外加报告手写的环境/超参表。
+
+### 11.3 错误预分类口径
+`classify_errors.py` 按优先级给每条 strict 错误打一个 `auto_error_type`：
+1. `格式/抽取问题(答案实际正确)`：lenient 答案==gold（非推理错）
+2. `答案格式错误(缺Final Answer)`：无 Final Answer 标记
+3. `过度推理/疑似截断`：`word_length >= 300`
+4. `计算或推理错误(待人工细分)`：其余——**只有这一类需人工再细分**（算术/推理路径/条件理解/幻觉条件）。
+
+### 11.4 可直接进报告的关键结论
+- **错误构成（3.9）**：Base 的错误 81% 是格式/抽取问题、仅 19% 是真·推理错误 → 定量证明「Base 瓶颈在格式」；后训练后 95%+ 错误转为真实推理错误。
+- **长度-准确率（3.7）**：全方法负相关；`accuracy_by_length.png` 显示越长越易错，GRPO 在每个长度段都最高、Base 下降最陡。
+- **训练过程（3.8）**：R2/R3 绝对 reward 更高是因公式含格式加分项，**仅 GRPO 与 R1 同尺度可比**（均 ~0.7）；曲线噪声大且平稳，说明 GRPO 收敛快、增益有限。
+- **奖励消融（3.6）**：格式奖励因 SFT 后格式已饱和而几乎无效；长度惩罚阈值 256 词、而 SFT 输出仅 ~108 词，几乎从不触发，故为「惰性」。

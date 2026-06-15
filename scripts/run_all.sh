@@ -223,10 +223,22 @@ if want report; then
       --prediction_files "${PRED_FILES[@]}" \
       --labels "${LABELS[@]}" \
       --output_csv "$RESULTS_DIR/metrics_summary.csv" \
-      --error_csv "$RESULTS_DIR/error_cases.csv" 2>&1 | tee "$LOG_DIR/report.log"
+      --error_csv "$RESULTS_DIR/error_cases.csv" \
+      --error_limit 100000 2>&1 | tee "$LOG_DIR/report.log"
     python scripts/plot_results.py \
       --metrics_csv "$RESULTS_DIR/metrics_summary.csv" \
       --output_dir "$FIG_DIR" 2>&1 | tee -a "$LOG_DIR/report.log"
+    # Deeper per-sample analysis figures + length table (no GPU/log needed).
+    python scripts/plot_analysis.py \
+      --prediction_files "${PRED_FILES[@]}" \
+      --labels "${LABELS[@]}" \
+      --fig_dir "$FIG_DIR" --table_dir "$RESULTS_DIR" 2>&1 | tee -a "$LOG_DIR/report.log"
+    # Auto pre-classification of error cases + error-type figure/table.
+    python scripts/classify_errors.py \
+      --error_csv "$RESULTS_DIR/error_cases.csv" \
+      --out_csv "$RESULTS_DIR/error_cases_classified.csv" \
+      --dist_csv "$RESULTS_DIR/error_type_distribution.csv" \
+      --fig "$FIG_DIR/error_type_distribution.png" 2>&1 | tee -a "$LOG_DIR/report.log"
   fi
 fi
 
