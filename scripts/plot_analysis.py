@@ -6,11 +6,11 @@ Everything here is computed directly from the predictions, so it needs no
 training logs or GPU. Produces:
 
   Figures (results/figures/):
-    - accuracy_vs_length.png     scatter: one point per method (len vs acc) ⭐
-    - length_distribution.png    box plot of output length per method
-    - accuracy_by_length.png     strict accuracy vs output-length bucket ⭐
-    - accuracy_grouped.png       strict vs lenient grouped bars
-    - radar.png                  multi-metric radar across methods
+    - accuracy_vs_length.svg     scatter: one point per method (len vs acc) ⭐
+    - length_distribution.svg    box plot of output length per method
+    - accuracy_by_length.svg     strict accuracy vs output-length bucket ⭐
+    - accuracy_grouped.svg       strict vs lenient grouped bars
+    - radar.svg                  multi-metric radar across methods
   Tables (results/):
     - length_stats.csv           per-method length mean/median/p90/max/std
 
@@ -29,7 +29,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from plot_style import apply_style, method_color, add_bar_labels, PALETTE, MARKERS
+from plot_style import (apply_style, method_color, method_fill, add_bar_labels,
+                        save_fig, PALETTE, MARKERS, SERIES_FILL, SERIES_EDGE)
+
+
+def save_figure(fig, out: Path) -> None:
+    save_fig(fig, out)
 
 
 def read_jsonl(path: str) -> list[dict]:
@@ -58,40 +63,48 @@ def load_methods(pred_files: list[str], labels: list[str]) -> list[dict]:
 
 
 def fig_accuracy_vs_length(methods: list[dict], out: Path) -> None:
-    plt.figure(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(7.2, 5.6))
     for i, m in enumerate(methods):
         x = m["lengths"].mean()
         y = m["correct"].mean()
-        plt.scatter(x, y, s=140, color=method_color(m["label"], i), zorder=3,
-                    edgecolors="black", linewidths=0.6)
-        plt.annotate(m["label"], (x, y), xytext=(6, 6), textcoords="offset points",
-                     fontsize=10, fontweight="bold")
-    plt.xlabel("Average output length (words)")
-    plt.ylabel("Strict accuracy")
-    plt.title("Accuracy vs. Output Length (per method)")
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out)
+        ax.scatter(x, y, s=105, color=method_color(m["label"], i), zorder=3,
+                   edgecolors="white", linewidths=0.9, label=m["label"])
+    ax.set_xlabel("Average output length (words)")
+    ax.set_ylabel("Strict accuracy")
+    ax.set_title("Accuracy vs. output length")
+    ax.yaxis.set_major_formatter(lambda v, _: f"{v * 100:.0f}%")
+    ax.margins(x=0.13, y=0.15)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=3)
+    plt.tight_layout(rect=(0, 0.08, 1, 1))
+    save_figure(fig, out)
     plt.close()
 
 
 def fig_length_distribution(methods: list[dict], out: Path) -> None:
-    plt.figure(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8.8, 5.0))
     data = [m["lengths"] for m in methods]
     labels = [m["label"] for m in methods]
     # Set tick labels via xticks (not the boxplot `labels` kwarg, which is
     # deprecated in matplotlib 3.9+) so this works across versions.
-    bp = plt.boxplot(data, showfliers=False, patch_artist=True,
-                     medianprops=dict(color="black"))
+    bp = ax.boxplot(
+        data,
+        showfliers=False,
+        patch_artist=True,
+        widths=0.58,
+        medianprops=dict(color="#111111", linewidth=1.2),
+        whiskerprops=dict(color="#586069", linewidth=0.8),
+        capprops=dict(color="#586069", linewidth=0.8),
+    )
     for i, box in enumerate(bp["boxes"]):
         box.set_facecolor(method_color(methods[i]["label"], i))
-        box.set_alpha(0.75)
-    plt.ylabel("Output length (words)")
-    plt.title("Output Length Distribution per Method")
-    plt.xticks(range(1, len(labels) + 1), labels, rotation=25, ha="right")
-    plt.grid(True, axis="y", alpha=0.3)
+        box.set_alpha(0.82)
+        box.set_edgecolor("#2F3437")
+    ax.set_ylabel("Output length (words)")
+    ax.set_title("Output length distribution")
+    ax.set_xticks(range(1, len(labels) + 1), labels, rotation=20, ha="right")
+    ax.tick_params(axis="x", length=0)
     plt.tight_layout()
-    plt.savefig(out)
+    save_figure(fig, out)
     plt.close()
 
 
@@ -99,7 +112,7 @@ def fig_accuracy_by_length(methods: list[dict], out: Path) -> None:
     # Buckets of output length (words). Last bucket is open-ended.
     edges = [0, 50, 100, 150, 200, 250, np.inf]
     centers = ["0-50", "50-100", "100-150", "150-200", "200-250", "250+"]
-    plt.figure(figsize=(9, 6))
+    fig, ax = plt.subplots(figsize=(8.4, 5.1))
     for i, m in enumerate(methods):
         # Fixed x positions per bucket so the axis is always left-to-right
         # ordered; sparse buckets become gaps (NaN) instead of reordering it.
@@ -110,16 +123,16 @@ def fig_accuracy_by_length(methods: list[dict], out: Path) -> None:
             if mask.sum() >= 10:  # skip sparse buckets to avoid noisy points
                 accs[b] = m["correct"][mask].mean()
         valid = ~np.isnan(accs)
-        plt.plot(xs[valid], accs[valid], marker=MARKERS[i % len(MARKERS)],
-                 markersize=6, color=method_color(m["label"], i), label=m["label"])
-    plt.xticks(np.arange(len(centers)), centers)
-    plt.xlabel("Output length bucket (words)")
-    plt.ylabel("Strict accuracy")
-    plt.title("Accuracy by Output-Length Bucket (over-reasoning analysis)")
-    plt.legend(fontsize=9)
-    plt.grid(True, alpha=0.3)
+        ax.plot(xs[valid], accs[valid], marker=MARKERS[i % len(MARKERS)],
+                markersize=5.4, color=method_color(m["label"], i), label=m["label"])
+    ax.set_xticks(np.arange(len(centers)), centers)
+    ax.set_xlabel("Output length bucket (words)")
+    ax.set_ylabel("Strict accuracy")
+    ax.set_title("Accuracy by output-length bucket")
+    ax.yaxis.set_major_formatter(lambda v, _: f"{v * 100:.0f}%")
+    ax.legend(ncol=2, loc="lower left")
     plt.tight_layout()
-    plt.savefig(out)
+    save_figure(fig, out)
     plt.close()
 
 
@@ -129,21 +142,21 @@ def fig_accuracy_grouped(methods: list[dict], out: Path) -> None:
     lenient = [m["lenient"].mean() for m in methods]
     x = np.arange(len(labels))
     w = 0.38
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8.8, 5.0))
     b1 = ax.bar(x - w / 2, strict, w, label="strict", color=PALETTE[1],
-                edgecolor="white", linewidth=0.8, zorder=3)
-    b2 = ax.bar(x + w / 2, lenient, w, label="lenient", color=PALETTE[4],
-                edgecolor="white", linewidth=0.8, zorder=3)
+                edgecolor="white", linewidth=0.7, zorder=3)
+    b2 = ax.bar(x + w / 2, lenient, w, label="lenient", color=PALETTE[5],
+                edgecolor="white", linewidth=0.7, zorder=3)
     add_bar_labels(ax, b1, strict, as_percent=True)
     add_bar_labels(ax, b2, lenient, as_percent=True)
     ax.set_xticks(x, labels, rotation=20, ha="right")
     ax.set_ylabel("Accuracy")
-    ax.set_title("Strict vs. Lenient Accuracy")
+    ax.set_title("Strict vs. lenient accuracy")
     ax.yaxis.set_major_formatter(lambda v, _: f"{v * 100:.0f}%")
-    ax.margins(y=0.15)
-    ax.legend()
+    ax.set_ylim(0, min(1.08, max(max(strict), max(lenient)) * 1.13))
+    ax.legend(loc="upper left")
     plt.tight_layout()
-    plt.savefig(out)
+    save_figure(fig, out)
     plt.close()
 
 
@@ -167,20 +180,32 @@ def fig_radar(methods: list[dict], out: Path) -> None:
     norm = np.array(norm)  # shape [n_axes, n_methods]
 
     angles = np.linspace(0, 2 * np.pi, len(axes_names), endpoint=False).tolist()
+    n = len(axes_names)
+    # Polygon area per method (proxy for "overall strength"); colours are then
+    # assigned by area rank so the LARGEST-area method gets blue (PALETTE[0]).
+    area = []
+    for j in range(len(methods)):
+        v = norm[:, j]
+        area.append(0.5 * abs(np.sin(2 * np.pi / n)) * sum(v[i] * v[(i + 1) % n] for i in range(n)))
+    rank = {j: r for r, j in enumerate(sorted(range(len(methods)), key=lambda j: -area[j]))}
+    radar_color = {j: PALETTE[rank[j] % len(PALETTE)] for j in range(len(methods))}
+
     angles += angles[:1]
-    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
+    fig, ax = plt.subplots(figsize=(7.2, 7.2), subplot_kw=dict(polar=True))
     for j, m in enumerate(methods):
         vals = norm[:, j].tolist()
         vals += vals[:1]
-        ax.plot(angles, vals, color=method_color(m["label"], j), linewidth=2, label=m["label"])
-        ax.fill(angles, vals, color=method_color(m["label"], j), alpha=0.10)
+        ax.plot(angles, vals, color=radar_color[j], linewidth=1.9, label=m["label"])
+        ax.fill(angles, vals, color=radar_color[j], alpha=0.10)
     ax.set_xticks(angles[:-1])
     ax.set_xticklabels(axes_names, fontsize=10)
     ax.set_yticklabels([])
-    ax.set_title("Normalized Multi-metric Comparison", pad=20)
-    ax.legend(loc="upper right", bbox_to_anchor=(1.25, 1.1), fontsize=9)
+    ax.set_title("Normalized multi-metric comparison", pad=18)
+    ax.grid(color="#D6D9DC", linewidth=0.7)
+    ax.spines["polar"].set_color("#B8C0C8")
+    ax.legend(loc="upper right", bbox_to_anchor=(1.28, 1.10), fontsize=8.6)
     plt.tight_layout()
-    plt.savefig(out)
+    save_figure(fig, out)
     plt.close()
 
 
@@ -213,11 +238,11 @@ def main() -> None:
 
     methods = load_methods(args.prediction_files, args.labels)
 
-    fig_accuracy_vs_length(methods, fig_dir / "accuracy_vs_length.png")
-    fig_length_distribution(methods, fig_dir / "length_distribution.png")
-    fig_accuracy_by_length(methods, fig_dir / "accuracy_by_length.png")
-    fig_accuracy_grouped(methods, fig_dir / "accuracy_grouped.png")
-    fig_radar(methods, fig_dir / "radar.png")
+    fig_accuracy_vs_length(methods, fig_dir / "accuracy_vs_length.svg")
+    fig_length_distribution(methods, fig_dir / "length_distribution.svg")
+    fig_accuracy_by_length(methods, fig_dir / "accuracy_by_length.svg")
+    fig_accuracy_grouped(methods, fig_dir / "accuracy_grouped.svg")
+    fig_radar(methods, fig_dir / "radar.svg")
     write_length_stats(methods, table_dir / "length_stats.csv")
 
     print(f"Saved analysis figures to {fig_dir}")

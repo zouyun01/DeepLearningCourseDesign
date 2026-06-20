@@ -1,48 +1,64 @@
 """Shared publication-quality plotting style for all figure scripts.
 
-Import and call apply_style() once at the top of a plotting script, then use
-PALETTE / method_color() so colors stay consistent across every figure.
+Clean WHITE-background academic theme whose colours match the schematic figures
+(model architecture / method overview): soft pastel fills with crisp saturated
+borders.  Import and call apply_style() once, then use the colour helpers so a
+method looks identical in every chart.
 """
 from __future__ import annotations
 
 import matplotlib as mpl
 from matplotlib.colors import to_rgb
 
-# Restrained cool blue-gray palette (dark navy -> light gray-blue). Few colors,
-# editorial/minimal look. All tones stay visible on a white background.
-PALETTE = ["#14334C", "#1F4E79", "#2E6F95", "#5E90B0", "#89A9BE", "#A9B8C4",
-           "#5F6B76", "#9AA7B0"]
-
-# Fixed color per method so a method looks identical in every chart.
-METHOD_COLORS = {
-    "Base": "#14334C",
-    "CoT-SFT": "#1F4E79",
-    "GRPO": "#2E6F95",
-    "SFT-GRPO-R1": "#5E90B0",
-    "SFT-GRPO-R2": "#89A9BE",
-    "SFT-GRPO-R3": "#A9B8C4",
+# Saturated "line / edge" colours (for lines, scatter, box edges, bar borders).
+LINE = {
+    "Base":        "#3F6FA8",   # blue
+    "CoT-SFT":     "#5E9544",   # green
+    "GRPO":        "#B23B7E",   # rose
+    "SFT-GRPO-R1": "#7B5EA8",   # purple
+    "SFT-GRPO-R2": "#BE7C1E",   # amber
+    "SFT-GRPO-R3": "#3E8C82",   # teal
 }
+# Matching light pastel fills (for bar bodies, box faces).
+FILL = {
+    "Base":        "#AFC9E8",
+    "CoT-SFT":     "#C7E0B4",
+    "GRPO":        "#E6AECF",
+    "SFT-GRPO-R1": "#D2C2EA",
+    "SFT-GRPO-R2": "#F2C893",
+    "SFT-GRPO-R3": "#A9D6D0",
+}
+# Ordered fall-backs for unknown labels.
+PALETTE = list(LINE.values())
+PALETTE_FILL = list(FILL.values())
 
-# Marker cycle to help distinguish line series under a near-monochrome palette.
+METHOD_COLORS = LINE  # backwards-compat alias
+
+# Two-series (grouped-bar) palette: DEEP blue + DEEP purple, solid / opaque.
+SERIES_FILL = ["#2F6CB0", "#6A4C9C"]
+SERIES_EDGE = ["#21548C", "#503576"]
+
 MARKERS = ["o", "s", "^", "D", "v", "P", "X", "*"]
 
 
 def apply_style() -> None:
-    """Set clean, modern, publication-ready matplotlib defaults."""
+    """Clean white-background academic theme."""
     mpl.rcParams.update({
-        "figure.dpi": 120,
-        "savefig.dpi": 300,
+        "figure.dpi": 140,
+        "savefig.dpi": 360,
         "savefig.bbox": "tight",
-        "figure.facecolor": "white",
-        "axes.facecolor": "white",
+        "savefig.pad_inches": 0.06,
+        "figure.facecolor": "#FFFFFF",
+        "axes.facecolor": "#FFFFFF",
         "font.family": "sans-serif",
-        "font.sans-serif": ["DejaVu Sans", "Arial", "Helvetica", "Liberation Sans"],
-        "font.size": 12,
-        "axes.titlesize": 15,
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "Liberation Sans"],
+        "font.size": 10.8,
+        "axes.titlesize": 13,
         "axes.titleweight": "bold",
-        "axes.titlepad": 12,
-        "axes.labelsize": 12.5,
-        "axes.labelpad": 8,
+        "axes.titlepad": 9,
+        "axes.labelsize": 11.2,
+        "axes.labelweight": "semibold",
+        "axes.labelpad": 7,
         "axes.edgecolor": "#444444",
         "axes.linewidth": 1.0,
         "axes.spines.top": False,
@@ -50,41 +66,57 @@ def apply_style() -> None:
         "axes.axisbelow": True,
         "axes.grid": True,
         "axes.grid.axis": "y",
-        "grid.color": "#9aa0a6",
-        "grid.linestyle": "--",
-        "grid.linewidth": 0.6,
-        "grid.alpha": 0.35,
-        "xtick.color": "#333333",
-        "ytick.color": "#333333",
-        "xtick.labelsize": 11,
-        "ytick.labelsize": 11,
-        "legend.frameon": False,
-        "legend.fontsize": 10,
+        "grid.color": "#DDDDDD",
+        "grid.linestyle": "-",
+        "grid.linewidth": 0.8,
+        "grid.alpha": 0.9,
+        "xtick.color": "#222222",
+        "ytick.color": "#222222",
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "xtick.major.size": 3.2,
+        "ytick.major.size": 3.2,
+        "legend.frameon": True,
+        "legend.framealpha": 0.95,
+        "legend.facecolor": "#FFFFFF",
+        "legend.edgecolor": "#C9C9C9",
+        "legend.fontsize": 9.6,
+        "legend.borderpad": 0.45,
+        "legend.labelspacing": 0.35,
         "lines.linewidth": 2.0,
-        "lines.markersize": 7,
+        "lines.markersize": 6.0,
+        "patch.linewidth": 1.2,
     })
 
 
 def method_color(label: str, idx: int = 0) -> str:
-    """Stable color for a method label, falling back to the palette by index."""
-    return METHOD_COLORS.get(label, PALETTE[idx % len(PALETTE)])
+    """Saturated colour for a method label (lines / scatter / edges)."""
+    return LINE.get(label, PALETTE[idx % len(PALETTE)])
+
+
+def method_fill(label: str, idx: int = 0) -> str:
+    """Light pastel fill for a method label (bar bodies / box faces)."""
+    return FILL.get(label, PALETTE_FILL[idx % len(PALETTE_FILL)])
+
+
+def save_fig(fig, out_path) -> None:
+    """Save both an .svg (vector) and a .png (for docx embedding)."""
+    from pathlib import Path
+    p = Path(out_path)
+    fig.savefig(p.with_suffix(".svg"))
+    fig.savefig(p.with_suffix(".png"), dpi=360)
 
 
 def _contrast_text(color) -> str:
-    """Black or white text depending on background luminance."""
     r, g, b = to_rgb(color)
     lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
     return "white" if lum < 0.55 else "#222222"
 
 
 def add_bar_labels(ax, bars, values, as_percent: bool = False,
-                   fmt: str | None = None, inside: bool = False) -> None:
-    """Annotate each bar with its value.
-
-    Default places the label just *above* the bar. inside=True instead places it
-    near the top inside the bar (white/dark text chosen by bar luminance); short
-    bars still fall back to above so the text stays legible.
-    """
+                   fmt: str | None = None, inside: bool = False,
+                   fontsize: float = 8.8) -> None:
+    """Annotate each bar with its value (default: just above the bar)."""
     ymax = max(values) if len(values) else 1.0
     for bar, v in zip(bars, values):
         if as_percent:
@@ -97,17 +129,15 @@ def add_bar_labels(ax, bars, values, as_percent: bool = False,
         cx = bar.get_x() + bar.get_width() / 2
         if inside and h >= 0.12 * ymax:
             ax.text(cx, h - 0.045 * ymax, text, ha="center", va="top",
-                    fontsize=10.5, fontweight="bold",
+                    fontsize=fontsize, fontweight="semibold",
                     color=_contrast_text(bar.get_facecolor()))
         else:
             ax.text(cx, h + 0.012 * ymax, text, ha="center", va="bottom",
-                    fontsize=9.5, color="#222222")
+                    fontsize=fontsize, color="#222222")
 
 
 def ema(values, alpha: float = 0.15):
-    """Exponential moving average for smoothing noisy training curves."""
-    out = []
-    acc = None
+    out, acc = [], None
     for v in values:
         acc = v if acc is None else (alpha * v + (1 - alpha) * acc)
         out.append(acc)

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import json
 import os
 from pathlib import Path
 
@@ -64,6 +65,30 @@ def load_scalars(event_dir: str):
     return out
 
 
+def load_scalars_from_trainer_state(run_dir: str):
+    hits = glob.glob(os.path.join(run_dir, "**", "trainer_state.json"), recursive=True)
+    if not hits:
+        return {}
+    # Prefer the latest checkpoint by path name; checkpoint-200 sorts after
+    # checkpoint-150 in the current experiment layout.
+    path = sorted(hits)[-1]
+    with open(path, encoding="utf-8") as f:
+        state = json.load(f)
+    out = {}
+    for row in state.get("log_history", []):
+        step = row.get("step")
+        if step is None:
+            continue
+        for k, v in row.items():
+            if k in {"step", "epoch"}:
+                continue
+            if isinstance(v, (int, float)):
+                steps, values = out.setdefault(k, ([], []))
+                steps.append(step)
+                values.append(v)
+    return out
+
+
 def pick_tag(tags: list[str], keywords: list[str]) -> str | None:
     for kw in keywords:
         for t in tags:
@@ -89,11 +114,18 @@ def main() -> None:
     runs = []
     for run_dir, label in zip(args.runs, args.labels):
         ev = find_event_dir(run_dir)
-        if ev is None:
-            print(f"[WARN] no tensorboard events under {run_dir} -- skipping "
-                  f"(did you sync the runs/ dir?)")
+        scalars = {}
+        if ev is not None:
+            try:
+                scalars = load_scalars(ev)
+            except ModuleNotFoundError:
+                print("[WARN] tensorboard is not installed; falling back to trainer_state.json")
+        if not scalars:
+            scalars = load_scalars_from_trainer_state(run_dir)
+        if not scalars:
+            print(f"[WARN] no scalar logs under {run_dir} -- skipping")
             continue
-        runs.append((label, load_scalars(ev)))
+        runs.append((label, scalars))
     if not runs:
         print("[FATAL] no runs with event files found. Sync outputs/grpo_*/runs first.")
         return
@@ -101,7 +133,7 @@ def main() -> None:
     made = 0
     for metric, keywords in METRIC_KEYWORDS.items():
         plotted = False
-        plt.figure(figsize=(9, 6))
+        fig, ax = plt.subplots(figsize=(8.4, 5.1))
         for j, (label, scalars) in enumerate(runs):
             tag = pick_tag(list(scalars.keys()), keywords)
             if tag is None:
@@ -109,19 +141,19 @@ def main() -> None:
             steps, values = scalars[tag]
             color = method_color(label, j)
             # Faint raw trace + bold EMA-smoothed line for a clean, readable look.
-            plt.plot(steps, values, color=color, alpha=0.18, linewidth=1.0, zorder=2)
-            plt.plot(steps, ema(values, alpha=0.15), color=color, linewidth=2.2,
-                     label=label, zorder=3)
+            ax.plot(steps, values, color=color, alpha=0.15, linewidth=0.8, zorder=2)
+            ax.plot(steps, ema(values, alpha=0.18), color=color, linewidth=1.9,
+                    label=label, zorder=3)
             plotted = True
         if plotted:
-            plt.xlabel("Training step")
-            plt.ylabel(metric.replace("_", " "))
-            plt.title(f"GRPO Training — {metric.replace('_', ' ')}")
-            plt.grid(True, alpha=0.3)
-            plt.legend()
+            pretty = metric.replace("_", " ")
+            ax.set_xlabel("Training step")
+            ax.set_ylabel(pretty)
+            ax.set_title(f"GRPO training: {pretty}")
+            ax.legend(loc="best", ncol=1)
             plt.tight_layout()
-            out = fig_dir / f"train_{metric}.png"
-            plt.savefig(out)
+            out = fig_dir / f"train_{metric}.svg"
+            fig.savefig(out)
             made += 1
             print(f"Saved {out}")
         plt.close()

@@ -75,3 +75,6 @@ datasets_cache/
 *.tar.gz
 *.tgz
 *.7z
+
+# Report sources: keep only the exported PDF in the repo, not the editable docx
+docs/*.docx

@@ -238,7 +238,11 @@ if want report; then
       --error_csv "$RESULTS_DIR/error_cases.csv" \
       --out_csv "$RESULTS_DIR/error_cases_classified.csv" \
       --dist_csv "$RESULTS_DIR/error_type_distribution.csv" \
-      --fig "$FIG_DIR/error_type_distribution.png" 2>&1 | tee -a "$LOG_DIR/report.log"
+      --fig "$FIG_DIR/error_type_distribution.svg" 2>&1 | tee -a "$LOG_DIR/report.log"
+    # Combined (a)(b)(c) group figures: GRPO training curves + length analysis.
+    python scripts/plot_combined_results.py 2>&1 | tee -a "$LOG_DIR/report.log"
+    # GRPO objective display equation (for the report).
+    python scripts/plot_formula.py 2>&1 | tee -a "$LOG_DIR/report.log"
   fi
 fi
 

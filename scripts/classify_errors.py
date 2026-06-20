@@ -16,7 +16,7 @@ Auto categories (single label per row, priority order):
 Outputs:
   results/error_cases_classified.csv   original + `auto_error_type` column
   results/error_type_distribution.csv  method x category counts (report table)
-  results/figures/error_type_distribution.png  stacked bar per method
+  results/figures/error_type_distribution.svg  stacked bar per method
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 from answer_extraction import numeric_equal, parse_number
 sys.path.append(str(Path(__file__).resolve().parent))
-from plot_style import apply_style
+from plot_style import apply_style, save_fig
 
 CAT_CORRECT_FMT = "格式/抽取问题(答案实际正确)"
 CAT_FORMAT = "答案格式错误(缺Final Answer)"
@@ -39,8 +39,19 @@ CAT_OVERLONG = "过度推理/疑似截断"
 CAT_WRONG = "计算或推理错误(待人工细分)"
 # Stable column order for the distribution table / stacked bars.
 CATEGORIES = [CAT_WRONG, CAT_OVERLONG, CAT_FORMAT, CAT_CORRECT_FMT]
-COLORS = {CAT_WRONG: "#C44E52", CAT_OVERLONG: "#DD8452",
-          CAT_FORMAT: "#8172B3", CAT_CORRECT_FMT: "#55A868"}
+# DEEP solid fills + darker edges (unified with the deep bar palette)
+COLORS = {
+    CAT_WRONG: "#C23A78",       # deep rose
+    CAT_OVERLONG: "#6A4C9C",    # deep purple
+    CAT_FORMAT: "#2F6CB0",      # deep blue
+    CAT_CORRECT_FMT: "#4F8C3B", # deep green
+}
+EDGES = {
+    CAT_WRONG: "#992D5E",
+    CAT_OVERLONG: "#503576",
+    CAT_FORMAT: "#21548C",
+    CAT_CORRECT_FMT: "#3B6B2C",
+}
 # English legend labels (the default matplotlib font cannot render CJK).
 EN_LABELS = {
     CAT_WRONG: "Calc/Reasoning error",
@@ -76,7 +87,7 @@ def main() -> None:
     parser.add_argument("--error_csv", default="results/error_cases.csv")
     parser.add_argument("--out_csv", default="results/error_cases_classified.csv")
     parser.add_argument("--dist_csv", default="results/error_type_distribution.csv")
-    parser.add_argument("--fig", default="results/figures/error_type_distribution.png")
+    parser.add_argument("--fig", default="results/figures/error_type_distribution.svg")
     parser.add_argument("--overlong", type=int, default=300,
                         help="word_length >= this is flagged as over-reasoning/truncation")
     args = parser.parse_args()
@@ -102,19 +113,20 @@ def main() -> None:
     frac = dist.div(dist.sum(axis=1), axis=0)
     x = np.arange(len(frac.index))
     bottom = np.zeros(len(frac.index))
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.grid(False)  # stacked composition reads cleaner without gridlines
+    fig, ax = plt.subplots(figsize=(8.8, 5.0))
+    ax.grid(True, axis="y", zorder=0)
     for c in CATEGORIES:
         ax.bar(x, frac[c].values, bottom=bottom, label=EN_LABELS[c], color=COLORS[c],
-               width=0.66, edgecolor="white", linewidth=0.8, zorder=3)
+               width=0.62, edgecolor=EDGES[c], linewidth=1.2, zorder=3)
         bottom += frac[c].values
-    ax.set_xticks(x, frac.index, rotation=20, ha="right")
+    ax.set_xticks(x, frac.index, rotation=18, ha="right")
     ax.set_ylim(0, 1)
     ax.set_ylabel("Share of strict errors")
-    ax.set_title("Error-type Composition per Method (auto-classified)")
-    ax.legend(fontsize=9, loc="lower center", bbox_to_anchor=(0.5, -0.28), ncol=2)
+    ax.set_title("Error-type composition per method")
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.32), ncol=2)
+    ax.tick_params(axis="x", length=0)
     plt.tight_layout()
-    plt.savefig(args.fig)
+    save_fig(fig, Path(args.fig))
     plt.close()
 
     print("=== auto error-type distribution (counts) ===")
